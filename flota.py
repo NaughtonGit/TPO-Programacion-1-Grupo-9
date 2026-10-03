@@ -2,18 +2,14 @@ import random
 import tablero
 
 CATALOGO = {
-    "F": {"nombre": "Fragata", "celdas": 2, "cantidad": 3, "ejes": 1, "zona": "libre"},
-    "D": {"nombre": "Destructor", "celdas": 3, "cantidad": 2, "ejes": 1, "zona": "libre"},
-    "S": {"nombre": "Submarino", "celdas": 3, "cantidad": 2, "ejes": 1, "zona": "inferior"},
-    "C": {"nombre": "Crucero", "celdas": 4, "cantidad": 1, "ejes": 1, "zona": "sin_extremos"},
-    "P": {"nombre": "Portaaviones", "celdas": 5, "cantidad": 1, "ejes": 1, "zona": "superior"},
     "E": {"nombre": "Estacion orbital", "celdas": 8, "cantidad": 1, "ejes": 3, "zona": "interior"},
+    "P": {"nombre": "Portaaviones", "celdas": 5, "cantidad": 1, "ejes": 1, "zona": "superior"},
+    "C": {"nombre": "Crucero", "celdas": 4, "cantidad": 1, "ejes": 1, "zona": "sin_extremos"},
+    "S": {"nombre": "Submarino", "celdas": 3, "cantidad": 2, "ejes": 1, "zona": "inferior"},
+    "D": {"nombre": "Destructor", "celdas": 3, "cantidad": 2, "ejes": 1, "zona": "libre"},
+    "F": {"nombre": "Fragata", "celdas": 2, "cantidad": 3, "ejes": 1, "zona": "libre"},
 }
 
-ORDEN_AUTOMATICO = ["E", "P", "C", "S", "D", "F"]
- 
-MAX_INTENTOS_POR_NAVE = 500
-MAX_REINICIOS = 50
 
 def naves_pendientes(flota, catalogo=CATALOGO):
     """
@@ -32,33 +28,6 @@ def naves_pendientes(flota, catalogo=CATALOGO):
 
     return pendientes
 
-
-def calcular_celdas(nave, desde, hasta):
-    """
-    obtener las celdas que ocupa una nave entre dos extremos.
-    recibe la letra del tipo de nave y dos tuplas con las coordenadas de los extremos..
-    retorna un conjunto de puntos que ocupa la nave, o un conjunto vacio si
-    la forma no corresponde a esa nave (ejes o cantidad de celdas).
-    """
-    ejes_distintos = 0
-
-    for i in range(3):
-        if desde[i] != hasta[i]:
-            ejes_distintos = ejes_distintos + 1
- 
-    if ejes_distintos != CATALOGO[nave]["ejes"]:
-        return set()
- 
-    celdas = set()
-    for z in range(min(desde[0], hasta[0]), max(desde[0], hasta[0]) + 1):
-        for x in range(min(desde[1], hasta[1]), max(desde[1], hasta[1]) + 1):
-            for y in range(min(desde[2], hasta[2]), max(desde[2], hasta[2]) + 1):
-                celdas.add((z, x, y))
- 
-    if len(celdas) != CATALOGO[nave]["celdas"]:
-        return set()
-    
-    return celdas
 
 def cumple_restriccion(nave, celdas, n):
     """
@@ -158,10 +127,10 @@ def ubicar_nave(cubo, flota, nave, desde, hasta):
  
 def ubicacion_automatica(cubo, catalogo, semilla):
     """
-    ubicar la flota completa al azar, respetando las reglas. Prueba posiciones al azar para cada nave; si alguna no entra despues
-    de muchos intentos, vacia el cubo y vuelve a empezar.
+    ubicar la flota completa al azar, respetando las reglas. 
+    prueba posiciones al azar para cada navehasta que una sea valida.
     recibe el cubo, el catalogo de naves y una semilla para el azar.
-    retorna la flota completa si pudo ubicar todas las naves, o una flota vacia si no pudo.
+    retorna la flota completa .
     """
     random.seed(semilla)
     n = len(cubo)
@@ -187,4 +156,14 @@ def ubicacion_automatica(cubo, catalogo, semilla):
                 ubicada = ubicar_nave(cubo, flota, letra, desde, hasta)
  
     return flota
- 
+
+# PRUEBAS
+cubo = tablero.crear_cubo(8)
+flota = {}
+
+print("\nPRUEBA ubicar fragata")
+print(ubicar_nave(cubo, flota, "F", (3, 5, 4), (3, 5, 5)))   # deberia mostrar True
+print(flota["F1"]["celdas"])                                 # {(3, 5, 4), (3, 5, 5)}
+
+print("\nPRUEBA destructor pegado a la fragata")
+print(ubicar_nave(cubo, flota, "D", (3, 5, 6), (3, 5, 8)))   # deberia mostrar False
