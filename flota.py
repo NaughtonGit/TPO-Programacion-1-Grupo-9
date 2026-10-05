@@ -157,13 +157,3 @@ def ubicacion_automatica(cubo, catalogo, semilla):
  
     return flota
 
-# PRUEBAS
-cubo = tablero.crear_cubo(8)
-flota = {}
-
-print("\nPRUEBA ubicar fragata")
-print(ubicar_nave(cubo, flota, "F", (3, 5, 4), (3, 5, 5)))   # deberia mostrar True
-print(flota["F1"]["celdas"])                                 # {(3, 5, 4), (3, 5, 5)}
-
-print("\nPRUEBA destructor pegado a la fragata")
-print(ubicar_nave(cubo, flota, "D", (3, 5, 6), (3, 5, 8)))   # deberia mostrar False
