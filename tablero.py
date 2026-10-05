@@ -114,10 +114,11 @@ def obtener_plano_z(cubo, z):
     return cubo[z - 1]
 
 
-def crear_plano_z(cubo, z):
+def crear_plano_z(cubo, z, mostrar_naves=False):
     """
     Recibe un cubo y un valor z.
     Devuelve un plano z graficado con x como columnas e y como filas.
+    Si mostrar_naves es True, muestra las naves propias como N.
     """
 
     plano = obtener_plano_z(cubo, z)
@@ -135,7 +136,11 @@ def crear_plano_z(cubo, z):
 
         for x in range(1, len(plano) + 1):
             celda = plano[x - 1][y - 1]
-            dibujo = dibujo + SIMBOLOS[celda] + " "
+            if mostrar_naves and celda == NAVE_OCULTA:
+                simbolo = "N"
+            else:
+                simbolo = SIMBOLOS[celda]
+            dibujo = dibujo + simbolo + " "
 
         dibujo = dibujo + "\n"
 

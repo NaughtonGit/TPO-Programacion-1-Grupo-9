@@ -61,31 +61,3 @@ def mostrar_resultado(cubo, flota, punto):
     return False
 
 
-# PRUEBAS
-
-if __name__ == "__main__":
-
-    cubo = tablero.crear_cubo(8)
-
-    flota = {
-        "F1": {
-            "tipo": "F",
-            "celdas": {(3, 5, 4), (3, 5, 5)},
-            "impactos": set()
-        },
-
-        "D1": {
-            "tipo": "D",
-            "celdas": {(6, 2, 2), (6, 2, 3), (6, 2, 4)},
-            "impactos": set()
-        }
-    }
-
-    print("\nPRUEBA radar con nave")
-    mostrar_resultado(cubo, flota, (3, 5, 4))
-
-    print("\nPRUEBA radar sin nave")
-    mostrar_resultado(cubo, flota, (8, 8, 8))
-
-    print("\nPRUEBA radar punto invalido")
-    mostrar_resultado(cubo, flota, (9, 2, 3))

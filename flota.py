@@ -118,7 +118,7 @@ def ubicar_nave(cubo, flota, nave, desde, hasta):
         return False
  
     for punto in celdas:
-        tablero.escribir_celda(cubo, punto, tablero.NAVE_OCULTA)
+        tablero.cambiar_celda(cubo, punto, tablero.NAVE_OCULTA)
  
     flota[nuevo_id(flota, nave)] = {"tipo": nave, "celdas": celdas, "impactos": set()}
     return True

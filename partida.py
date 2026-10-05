@@ -73,21 +73,9 @@ def dibujar_estado(nombre, cubo):
     for z in range(1, tamanio + 1):
         print("========= CAPA z = " + str(z) + " =========")
  
-        encabezado = "    "
-        for x in range(1, tamanio + 1):
-            encabezado = encabezado + "x" + str(x) + "  "
-        print(encabezado)
+        print(tablero.crear_plano_z(cubo, z, mostrar_naves=True), end="")
  
-        for y in range(1, tamanio + 1):
-            fila = "y" + str(y) + "  "
-            for x in range(1, tamanio + 1):
-                if tablero.obtener_celda(cubo, (z, x, y)) == tablero.AGUA_SIN_EXPLORAR:
-                    fila = fila + "~   "
-                else:
-                    fila = fila + "N   "
-            print(fila)
- 
-    print("Referencias: ~ agua   N nave")
+    print("Referencias: ~ agua   N nave   o agua marcada   X impacto   # hundido   ? sonar")
  
  
 
@@ -252,4 +240,5 @@ def menu_principal():
         seguir = MENU_PRINCIPAL[opcion][1]()
  
  
-menu_principal()
+if __name__ == "__main__":
+    menu_principal()

@@ -67,6 +67,18 @@ def test_crear_plano_z():
     assert "y2" in dibujo
 
 
+@pytest.mark.parametrize("mostrar_naves, simbolo", [(False, "~"), (True, "N")])
+def test_crear_plano_z_mostrar_naves(mostrar_naves, simbolo):
+    cubo = crear_cubo(2)
+    cambiar_celda(cubo, [1, 1, 1], NAVE_OCULTA)
+    cambiar_celda(cubo, [1, 2, 1], IMPACTO)
+
+    dibujo = crear_plano_z(cubo, 1, mostrar_naves=mostrar_naves)
+
+    assert dibujo.splitlines()[1].split() == ["y1", simbolo, "X"]
+    assert obtener_celda(cubo, [1, 1, 1]) == NAVE_OCULTA
+
+
 def test_crear_matriz():
     matriz = crear_matriz(2, 3)
 
