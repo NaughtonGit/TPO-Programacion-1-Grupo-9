@@ -1,6 +1,4 @@
-
- 
- 
+import pytest
 import tablero
 import flota
  
@@ -74,3 +72,51 @@ def test_automatica_misma_semilla_misma_flota():
     flota1 = flota.ubicacion_automatica(tablero.crear_cubo(8), flota.CATALOGO, 42)
     flota2 = flota.ubicacion_automatica(tablero.crear_cubo(8), flota.CATALOGO, 42)
     assert flota1 == flota2
+
+
+def test_registrar_impacto():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "F", (3, 5, 4), (3, 5, 5))
+
+    assert flota.registrar_impacto(cubo, mi_flota, [3, 5, 4]) == "F1"
+    assert (3, 5, 4) in mi_flota["F1"]["impactos"]
+    assert tablero.obtener_celda(cubo, [3, 5, 4]) == tablero.IMPACTO
+
+
+def test_registrar_impacto_en_agua():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "F", (3, 5, 4), (3, 5, 5))
+
+    assert flota.registrar_impacto(cubo, mi_flota, [1, 1, 1]) == None
+    assert mi_flota["F1"]["impactos"] == set()
+
+
+def test_nave_averiada_y_hundida():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "D", (2, 1, 5), (2, 1, 7))
+
+    assert flota.estado_nave(mi_flota, "D1") == "intacta"
+
+    flota.registrar_impacto(cubo, mi_flota, [2, 1, 5])
+    assert flota.estado_nave(mi_flota, "D1") == "averiada"
+
+    flota.registrar_impacto(cubo, mi_flota, [2, 1, 6])
+    flota.registrar_impacto(cubo, mi_flota, [2, 1, 7])
+    assert flota.estado_nave(mi_flota, "D1") == "hundida"
+    assert tablero.obtener_celda(cubo, [2, 1, 5]) == tablero.HUNDIDO
+    assert tablero.obtener_celda(cubo, [2, 1, 7]) == tablero.HUNDIDO
+
+
+def test_mismo_impacto_dos_veces_no_suma():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "F", (3, 5, 4), (3, 5, 5))
+
+    flota.registrar_impacto(cubo, mi_flota, [3, 5, 4])
+    flota.registrar_impacto(cubo, mi_flota, [3, 5, 4])
+    assert flota.estado_nave(mi_flota, "F1") == "averiada"
+
+

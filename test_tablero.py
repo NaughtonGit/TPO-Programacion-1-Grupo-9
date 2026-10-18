@@ -10,6 +10,11 @@ from tablero import (
     cambiar_celda,
     obtener_plano_z,
     crear_plano_z,
+    obtener_plano_x,
+    obtener_plano_y,
+    crear_plano_x,
+    crear_plano_y,
+    obtener_vecinos,
     crear_matriz,
     obtener_valor_matriz,
     cambiar_valor_matriz
@@ -78,6 +83,52 @@ def test_crear_plano_z_mostrar_naves(mostrar_naves, simbolo):
     assert dibujo.splitlines()[1].split() == ["y1", simbolo, "X"]
     assert obtener_celda(cubo, [1, 1, 1]) == NAVE_OCULTA
 
+def test_obtener_plano_x():
+    cubo = crear_cubo(2)
+    cambiar_celda(cubo, [2, 1, 1], IMPACTO)
+
+    plano = obtener_plano_x(cubo, 1)
+
+    assert len(plano) == 2
+    assert plano[1][0] == IMPACTO
+
+
+def test_obtener_plano_y():
+    cubo = crear_cubo(2)
+    cambiar_celda(cubo, [2, 1, 1], IMPACTO)
+
+    plano = obtener_plano_y(cubo, 1)
+
+    assert len(plano) == 2
+    assert plano[1][0] == IMPACTO
+
+
+def test_crear_plano_x():
+    cubo = crear_cubo(2)
+    cambiar_celda(cubo, [2, 1, 1], IMPACTO)
+
+    dibujo = crear_plano_x(cubo, 1)
+
+    assert dibujo.splitlines()[0].split() == ["z1", "z2"]
+    assert dibujo.splitlines()[1].split() == ["y1", "~", "X"]
+
+
+def test_crear_plano_y():
+    cubo = crear_cubo(2)
+    cambiar_celda(cubo, [1, 1, 1], NAVE_OCULTA)
+
+    dibujo = crear_plano_y(cubo, 1, mostrar_naves=True)
+
+    assert dibujo.splitlines()[0].split() == ["z1", "z2"]
+    assert dibujo.splitlines()[1].split() == ["x1", "N", "~"]
+
+
+def test_obtener_vecinos():
+    cubo = crear_cubo(8)
+
+    assert len(obtener_vecinos(cubo, [4, 4, 4])) == 6
+    assert (5, 4, 4) in obtener_vecinos(cubo, [4, 4, 4])
+    assert sorted(obtener_vecinos(cubo, [1, 1, 1])) == [(1, 1, 2), (1, 2, 1), (2, 1, 1)]
 
 def test_crear_matriz():
     matriz = crear_matriz(2, 3)

@@ -157,3 +157,50 @@ def ubicacion_automatica(cubo, catalogo, semilla):
  
     return flota
 
+def registrar_impacto(cubo, flota, punto):
+    """
+    registra un disparo que pego en una nave.
+    recibe el cubo, la flota del jugador atacado y el punto [z, x, y] del disparo.
+    si el punto es parte de una nave, lo agrega a sus impactos y marca la celda como impacto.
+    si con ese impacto la nave queda hundida, marca todas sus celdas como hundido.
+    retorna el id de la nave alcanzada, o None si el punto no es parte de ninguna nave.
+    """
+    punto = tuple(punto)
+
+    for id_nave in flota:
+        nave = flota[id_nave]
+
+        if punto in nave["celdas"]:
+            nave["impactos"].add(punto)
+            tablero.cambiar_celda(cubo, punto, tablero.IMPACTO)
+
+            if len(nave["impactos"]) == len(nave["celdas"]):
+                for celda in nave["celdas"]:
+                    tablero.cambiar_celda(cubo, celda, tablero.HUNDIDO)
+
+            return id_nave
+
+    return None
+
+
+def estado_nave(flota, id_nave):
+    """
+    indica como esta una nave segun los impactos que recibio.
+    recibe la flota del jugador y el id de la nave.
+    retorna "intacta" si no recibio impactos, "averiada" si recibio algunos
+    o "hundida" si todas sus celdas fueron impactadas.
+    lanza ValueError si la nave no existe.
+    """
+    if id_nave not in flota:
+        raise ValueError("Nave inexistente")
+
+    impactos = len(flota[id_nave]["impactos"])
+    celdas = len(flota[id_nave]["celdas"])
+
+    if impactos == celdas:
+        return "hundida"
+
+    if impactos > 0:
+        return "averiada"
+
+    return "intacta"

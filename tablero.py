@@ -146,6 +146,144 @@ def crear_plano_z(cubo, z, mostrar_naves=False):
 
     return dibujo
 
+def obtener_plano_x(cubo, x):
+    """
+    Recibe un cubo y un valor x.
+    Devuelve el corte que corresponde a ese valor x, como matriz [z][y].
+    Lanza ValueError si el plano indicado no existe.
+    """
+
+    tamanio = len(cubo)
+
+    if x < 1 or x > tamanio:
+        raise ValueError("Plano x inválido")
+
+    plano = []
+
+    for z in range(tamanio):
+        fila = []
+
+        for y in range(tamanio):
+            fila.append(cubo[z][x - 1][y])
+
+        plano.append(fila)
+
+    return plano
+
+
+def obtener_plano_y(cubo, y):
+    """
+    Recibe un cubo y un valor y.
+    Devuelve el corte que corresponde a ese valor y, como matriz [z][x].
+    Lanza ValueError si el plano indicado no existe.
+    """
+
+    tamanio = len(cubo)
+
+    if y < 1 or y > tamanio:
+        raise ValueError("Plano y inválido")
+
+    plano = []
+
+    for z in range(tamanio):
+        fila = []
+
+        for x in range(tamanio):
+            fila.append(cubo[z][x][y - 1])
+
+        plano.append(fila)
+
+    return plano
+
+
+def crear_plano_x(cubo, x, mostrar_naves=False):
+    """
+    Recibe un cubo y un valor x.
+    Devuelve el corte x graficado con z como columnas e y como filas.
+    Si mostrar_naves es True, muestra las naves propias como N.
+    """
+
+    plano = obtener_plano_x(cubo, x)
+    dibujo = "    "
+
+    # Crea los encabezados de las columnas.
+    for z in range(1, len(plano) + 1):
+        dibujo = dibujo + "z" + str(z) + " "
+
+    dibujo = dibujo + "\n"
+
+    # Recorre primero las filas y, dentro de cada fila, las columnas.
+    for y in range(1, len(plano) + 1):
+        dibujo = dibujo + "y" + str(y) + "  "
+
+        for z in range(1, len(plano) + 1):
+            celda = plano[z - 1][y - 1]
+            if mostrar_naves and celda == NAVE_OCULTA:
+                simbolo = "N"
+            else:
+                simbolo = SIMBOLOS[celda]
+            dibujo = dibujo + simbolo + " "
+
+        dibujo = dibujo + "\n"
+
+    return dibujo
+
+
+def crear_plano_y(cubo, y, mostrar_naves=False):
+    """
+    Recibe un cubo y un valor y.
+    Devuelve el corte y graficado con z como columnas y x como filas.
+    Si mostrar_naves es True, muestra las naves propias como N.
+    """
+
+    plano = obtener_plano_y(cubo, y)
+    dibujo = "    "
+
+    # Crea los encabezados de las columnas.
+    for z in range(1, len(plano) + 1):
+        dibujo = dibujo + "z" + str(z) + " "
+
+    dibujo = dibujo + "\n"
+
+    # Recorre primero las filas y, dentro de cada fila, las columnas.
+    for x in range(1, len(plano) + 1):
+        dibujo = dibujo + "x" + str(x) + "  "
+
+        for z in range(1, len(plano) + 1):
+            celda = plano[z - 1][x - 1]
+            if mostrar_naves and celda == NAVE_OCULTA:
+                simbolo = "N"
+            else:
+                simbolo = SIMBOLOS[celda]
+            dibujo = dibujo + simbolo + " "
+
+        dibujo = dibujo + "\n"
+
+    return dibujo
+
+
+def obtener_vecinos(cubo, punto):
+    """
+    Recibe un cubo y un punto [z, x, y].
+    Devuelve una lista con las vecinas ortogonales del punto: la de adelante
+    y la de atras en cada eje (como maximo 6). Las que quedan fuera del cubo
+    no se incluyen.
+    Lanza ValueError si el punto es invalido.
+    """
+
+    if not validar_punto(cubo, punto):
+        raise ValueError("Punto inválido")
+
+    desplazamientos = [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)]
+    vecinos = []
+
+    for dz, dx, dy in desplazamientos:
+        vecino = (punto[0] + dz, punto[1] + dx, punto[2] + dy)
+
+        if validar_punto(cubo, vecino):
+            vecinos.append(vecino)
+
+    return vecinos
 
 def crear_matriz(filas, columnas, valor=0):
     """
