@@ -3,10 +3,10 @@ import tablero
 
 def busqueda_lineal(flota, punto):
     """
-    buscar una coordenada dentro de todas las celdas de la flota.
-    recibe la flota del jugador y una tupla con el punto (z, x, y).
-    retorna el id de la nave encontrada y la cantidad de comparaciones.
-    si no encuentra una nave retorna None y la cantidad de comparaciones.
+    buscar una coordenada dentro de todas las celdas de la flota
+    recibe la flota del jugador y una tupla con el punto (z, x, y)
+    retorna el id de la nave encontrada y la cantidad de comparaciones
+    si no encuentra una nave retorna None y la cantidad de comparaciones
     """
 
     comparaciones = 0
@@ -23,10 +23,10 @@ def busqueda_lineal(flota, punto):
 
 def detectar(cubo, flota, punto):
     """
-    usar el radar para buscar una nave en un punto del cubo.
-    recibe el cubo, la flota y una tupla con las coordenadas.
-    retorna el id de la nave encontrada y la cantidad de comparaciones.
-    si el punto no es valido retorna None y 0 comparaciones.
+    usar el radar para buscar una nave en un punto del cubo
+    recibe el cubo, la flota y una tupla con las coordenadas
+    retorna el id de la nave encontrada y la cantidad de comparaciones
+    si el punto no es valido retorna None y 0 comparaciones
     """
 
     if not tablero.validar_punto(cubo, punto):
