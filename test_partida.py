@@ -104,3 +104,118 @@ def test_continuar_y_salir():
 def test_menu_principal_termina_al_salir(monkeypatch):
     simular_teclado(monkeypatch, ["7", "4", "5"])
     partida.menu_principal()   
+
+
+
+import pytest
+from errores import (
+    ConfiguracionInvalida,
+    JugadaInvalida,
+    ArmaNoDisponible,
+    PuntoFueraDelCubo,
+    CeldaYaAtacada
+)
+
+
+def armar_jugador(nombre, desde, hasta):
+    """crea un jugador con una sola fragata, para partidas cortas."""
+    cubo = tablero.crear_cubo(partida.TAMANIO)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "F", desde, hasta)
+    return {"nombre": nombre, "cubo": cubo, "flota": mi_flota}
+
+
+def estado_de_prueba():
+    configuracion = {"jugadores": [
+        armar_jugador("Ana", (1, 1, 1), (1, 1, 2)),
+        armar_jugador("Beto", (3, 5, 4), (3, 5, 5)),
+    ]}
+    return partida.nueva_partida_1v1(configuracion)
+
+
+def test_nueva_partida_1v1():
+    estado = estado_de_prueba()
+    assert estado["actual"] == 0
+    assert estado["turno"] == 1
+    assert estado["jugadores"][1]["municion"]["T"] == "ilimitada"
+
+
+def test_configuracion_invalida():
+    with pytest.raises(ConfiguracionInvalida):
+        partida.nueva_partida_1v1({"jugadores": []})
+    with pytest.raises(ConfiguracionInvalida):
+        partida.nueva_partida_vs_maquina({"jugadores": [{}, {}]}, "imposible")
+
+
+def test_disparo_al_agua_pasa_el_turno():
+    estado = estado_de_prueba()
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})
+    assert estado["ultimo_disparo"]["resultado"] == "agua"
+    assert estado["actual"] == 1
+    assert estado["turno"] == 2
+
+
+def test_impacto_hundido_y_ganador():
+    estado = estado_de_prueba()
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (3, 5, 4)})   # Ana
+    assert estado["ultimo_disparo"]["resultado"] == "impacto"
+    assert estado["ultimo_disparo"]["impactos"] == 1
+
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})   # Beto
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (3, 5, 5)})   # Ana
+    assert estado["ultimo_disparo"]["resultado"] == "hundido"
+    assert partida.hay_ganador(estado) == "Ana"
+    assert estado["actual"] == 0
+    assert tablero.obtener_celda(estado["jugadores"][1]["cubo"], (3, 5, 4)) == tablero.HUNDIDO
+
+
+@pytest.mark.parametrize("jugada, error", [
+    ({"arma": "T", "objetivo": (9, 1, 1)}, PuntoFueraDelCubo),
+    ({"arma": "G", "objetivo": (1, 1, 1)}, ArmaNoDisponible),
+])
+def test_jugada_invalida_no_cambia_el_turno(jugada, error):
+    estado = estado_de_prueba()
+    with pytest.raises(error):
+        partida.ejecutar_turno(estado, jugada)
+    assert estado["actual"] == 0
+    assert estado["registro"] == []
+
+
+def test_celda_ya_atacada():
+    estado = estado_de_prueba()
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})   # Ana, cubo de Beto
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})   # Beto, cubo de Ana
+    with pytest.raises(CeldaYaAtacada):
+        partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})
+
+
+def test_turno_maquina():
+    configuracion = {"jugadores": [
+        armar_jugador("Ana", (1, 1, 1), (1, 1, 2)),
+        armar_jugador("Robot", (3, 5, 4), (3, 5, 5)),
+    ]}
+    estado = partida.nueva_partida_vs_maquina(configuracion, "facil")
+
+    with pytest.raises(JugadaInvalida):
+        partida.turno_maquina(estado)
+
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})
+    partida.turno_maquina(estado)
+    assert estado["ultimo_disparo"]["jugador"] == "Robot"
+    assert estado["actual"] == 0
+    assert len(estado["registro"]) == 2
+
+
+def test_jugar_partida_completa(monkeypatch, capsys):
+    estado = estado_de_prueba()
+    simular_teclado(monkeypatch, [
+        "s",
+        "1", "Z", "G", "3,5,4", "T", "3,5,4",   # Ana: letra invalida, arma no disponible, impacto
+        "1", "T", "8,8,8",                      # Beto: agua
+        "1", "T", "3,5,5",                      # Ana: hunde y gana
+    ])
+    partida.jugar(estado)
+    salida = capsys.readouterr().out
+    assert "todavia no esta disponible" in salida
+    assert "Nave hundida: Fragata" in salida
+    assert "Gano Ana!" in salida

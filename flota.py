@@ -204,3 +204,13 @@ def estado_nave(flota, id_nave):
         return "averiada"
 
     return "intacta"
+
+def flota_hundida(flota):
+    """
+    recibe la flota de un jugador.
+    retorna True si todas sus naves estan hundidas.
+    """
+    for id_nave in flota:
+        if estado_nave(flota, id_nave) != "hundida":
+            return False
+    return True

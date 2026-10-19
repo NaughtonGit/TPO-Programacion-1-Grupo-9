@@ -120,3 +120,14 @@ def test_mismo_impacto_dos_veces_no_suma():
     assert flota.estado_nave(mi_flota, "F1") == "averiada"
 
 
+def test_flota_hundida():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "F", (3, 5, 4), (3, 5, 5))
+    assert flota.flota_hundida(mi_flota) == False
+
+    flota.registrar_impacto(cubo, mi_flota, [3, 5, 4])
+    assert flota.flota_hundida(mi_flota) == False
+
+    flota.registrar_impacto(cubo, mi_flota, [3, 5, 5])
+    assert flota.flota_hundida(mi_flota) == True
