@@ -11,7 +11,8 @@ from errores import (
     ArmaNoDisponible,
     SinMunicion,
     PuntoFueraDelCubo,
-    CeldaYaAtacada
+    CeldaYaAtacada,
+    PartidaTerminada
 )
 
 TAMANIO = 8
@@ -144,9 +145,13 @@ def ejecutar_turno(estado, jugada):
     aplica la jugada del jugador que tiene el turno y pasa al siguiente.
     recibe el estado y la jugada: {"arma": letra, "objetivo": (z, x, y)}.
     retorna el estado actualizado. En "ultimo_disparo" queda el resultado.
-    lanza ArmaNoDisponible, SinMunicion, PuntoFueraDelCubo o CeldaYaAtacada.
+    lanza PartidaTerminada, ArmaNoDisponible, SinMunicion,
+    PuntoFueraDelCubo o CeldaYaAtacada.
     En esos casos el estado no cambia y el turno no avanza.
     """
+    if hay_ganador(estado) is not None:
+        raise PartidaTerminada("La partida ya termino.")
+
     jugador = jugador_actual(estado)
     rival = rival_actual(estado)
     letra = jugada["arma"]
@@ -219,7 +224,8 @@ def hay_ganador(estado):
     """
     jugadores = estado["jugadores"]
     for i in range(2):
-        if flota.flota_hundida(jugadores[1 - i]["flota"]):
+        flota_rival = jugadores[1 - i]["flota"]
+        if flota_rival and flota.flota_hundida(flota_rival):
             return jugadores[i]["nombre"]
     return None
 

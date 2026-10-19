@@ -24,3 +24,7 @@ class PuntoFueraDelCubo(JugadaInvalida):
 
 class CeldaYaAtacada(JugadaInvalida):
     """La celda ya habia recibido un disparo."""
+
+
+class PartidaTerminada(JugadaInvalida):
+    """Ya hay un ganador y no se pueden realizar mas jugadas."""

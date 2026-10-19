@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import pytest
 
 import tablero
@@ -8,7 +10,8 @@ from errores import (
     JugadaInvalida,
     ArmaNoDisponible,
     PuntoFueraDelCubo,
-    CeldaYaAtacada
+    CeldaYaAtacada,
+    PartidaTerminada
 )
 
 
@@ -217,3 +220,42 @@ def test_jugar_partida_completa(monkeypatch, capsys):
     assert "todavia no esta disponible" in salida
     assert "Nave hundida: Fragata" in salida
     assert "Gano Ana!" in salida
+
+
+@pytest.mark.parametrize("ganador, objetivos", [
+    ("Ana", [(3, 5, 4), (8, 8, 8), (3, 5, 5)]),
+    ("Beto", [(8, 8, 8), (1, 1, 1), (7, 7, 7), (1, 1, 2)]),
+])
+def test_victoria_impide_seguir_disparando(ganador, objetivos):
+    estado = estado_de_prueba()
+    for objetivo in objetivos:
+        partida.ejecutar_turno(estado, {"arma": "T", "objetivo": objetivo})
+
+    assert partida.hay_ganador(estado) == ganador
+    assert partida.jugador_actual(estado)["nombre"] == ganador
+    anterior = deepcopy(estado)
+
+    with pytest.raises(PartidaTerminada):
+        partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (6, 6, 6)})
+    assert estado == anterior
+
+
+def test_flota_vacia_no_da_una_victoria():
+    estado = estado_de_prueba()
+    estado["jugadores"][1]["flota"] = {}
+    assert partida.hay_ganador(estado) is None
+
+
+def test_hundir_una_nave_no_alcanza_para_ganar():
+    estado = estado_de_prueba()
+    rival = estado["jugadores"][1]
+    assert flota.ubicar_nave(rival["cubo"], rival["flota"], "F", (8, 1, 1), (8, 1, 2))
+
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (3, 5, 4)})
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (3, 5, 5)})
+
+    assert estado["ultimo_disparo"]["resultado"] == "hundido"
+    assert partida.hay_ganador(estado) is None
+    assert estado["actual"] == 1
+    assert estado["turno"] == 4
