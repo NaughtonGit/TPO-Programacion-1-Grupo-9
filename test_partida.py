@@ -1,6 +1,15 @@
+import pytest
+
 import tablero
 import flota
 import partida
+from errores import (
+    ConfiguracionInvalida,
+    JugadaInvalida,
+    ArmaNoDisponible,
+    PuntoFueraDelCubo,
+    CeldaYaAtacada
+)
 
 
 def simular_teclado(monkeypatch, respuestas):
@@ -103,19 +112,8 @@ def test_continuar_y_salir():
 
 def test_menu_principal_termina_al_salir(monkeypatch):
     simular_teclado(monkeypatch, ["7", "4", "5"])
-    partida.menu_principal()   
-
-
-
-import pytest
-from errores import (
-    ConfiguracionInvalida,
-    JugadaInvalida,
-    ArmaNoDisponible,
-    PuntoFueraDelCubo,
-    CeldaYaAtacada
-)
-
+    partida.menu_principal()
+    
 
 def armar_jugador(nombre, desde, hasta):
     """crea un jugador con una sola fragata, para partidas cortas."""
