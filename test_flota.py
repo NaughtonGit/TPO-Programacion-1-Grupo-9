@@ -168,4 +168,4 @@ def test_serializar_y_deserializar_preserva_el_danio_del_portaaviones():
 
     assert restaurada == mi_flota
     assert flota.estado_nave(restaurada, "P1") == "averiada"
-    assert flota.puede_recibir_impacto(restaurada, (2, 1, 1))
+    assert flota.puede_recibir_impacto(restaurada, (6, 1, 1))

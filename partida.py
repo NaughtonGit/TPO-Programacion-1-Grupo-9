@@ -1,5 +1,6 @@
 import re
 import random
+import sys
 import tablero
 import flota
 import armamento
@@ -495,10 +496,22 @@ def opcion_ver_cubo(estado):
     return False
 
 
+def _pedir_nombre_y_guardar(estado, mensaje):
+    """Pide un nombre válido y reintenta si ya existe o no cumple el patrón."""
+    while True:
+        nombre = input(mensaje).strip()
+        try:
+            return registro.guardar_partida(estado, nombre)
+        except (ValueError, FileExistsError) as error:
+            print(str(error) + " Intente con otro nombre.")
+
+
 def opcion_guardar_y_salir(estado):
-    """Todavia no disponible. Retorna False porque el turno sigue."""
-    print("Opcion disponible en una proxima entrega.")
-    return False
+    """Guarda el estado actual y vuelve al menu principal sin disparar."""
+    ruta = _pedir_nombre_y_guardar(estado, "Nombre para guardar la partida: ")
+    estado["_guardar_y_salir"] = True
+    print("Partida guardada en " + str(ruta) + ".")
+    return True
 
 
 # Menu del turno: numero -> (texto, funcion). La funcion retorna True si el turno termino.
@@ -557,25 +570,32 @@ def mostrar_resumen(estado, ganador):
           + " | Hundidos: " + str(resumen["hundidos"]))
 
 
-def jugar(estado):
+def jugar(estado, confirmar_inicio=True):
     """
     pide confirmacion y alterna turnos hasta que alguien hunde la flota rival.
     recibe el estado inicial de la partida.
     """
-    if not confirmar("Flotas listas. Iniciar la partida?"):
+    if confirmar_inicio and not confirmar("Flotas listas. Iniciar la partida?"):
         print("Partida cancelada.")
         return
 
     ganador = None
+    estado.pop("_guardar_y_salir", None)
     try:
-        while ganador is None:
+        while ganador is None and not estado.get("_guardar_y_salir", False):
             jugador = jugador_actual(estado)
             print("\n--- Turno de " + jugador["nombre"] + " ---")
             TURNOS[jugador["tipo"]](estado)
             ganador = hay_ganador(estado)
     finally:
-        # Se muestra el resumen aunque la partida se corte (por ejemplo con Ctrl+C).
-        mostrar_resumen(estado, ganador)
+        if not estado.get("_guardar_y_salir", False):
+            # Se muestra el resumen aunque la partida se corte (por ejemplo con Ctrl+C).
+            mostrar_resumen(estado, ganador)
+
+    if (ganador is not None and sys.stdin.isatty()
+            and confirmar("Guardar el resultado de la partida?")):
+        ruta = _pedir_nombre_y_guardar(estado, "Nombre para el registro: ")
+        print("Resultado guardado en " + str(ruta) + ".")
 
 
 def partida_1v1():
@@ -614,8 +634,90 @@ def partida_maquina_vs_maquina():
 
 
 def continuar_partida():
-    """Todavia no disponible."""
-    print("Opcion disponible en una proxima entrega.")
+    """Lista las partidas guardadas y permite continuar una de ellas."""
+    partidas = [p for p in registro.obtener_detalle_partidas() if p["ganador"] is None]
+    if not partidas:
+        print("No hay partidas guardadas.")
+        return True
+
+    opciones = {}
+    print("\n--- Partidas guardadas ---")
+    for indice, partida in enumerate(partidas, 1):
+        clave = str(indice)
+        opciones[clave] = partida
+        print(clave + " - " + partida["nombre"] + " | turno "
+              + str(partida["turno"]) + " | " + str(partida["fecha"]))
+    print("0 - Volver")
+    opciones["0"] = None
+    seleccion = input("Opcion: ").strip()
+    while seleccion not in opciones:
+        print("Opcion invalida. Intente de nuevo.")
+        seleccion = input("Opcion: ").strip()
+    if seleccion == "0":
+        return True
+
+    estado = registro.cargar_partida(opciones[seleccion]["nombre"])
+    print("Partida cargada.")
+    jugar(estado, confirmar_inicio=False)
+    return True
+
+
+def listar_partidas_guardadas():
+    """Muestra los resúmenes de las partidas almacenadas."""
+    partidas = registro.obtener_detalle_partidas()
+    if not partidas:
+        print("No hay partidas guardadas.")
+        return True
+    for partida in partidas:
+        ganador = partida["ganador"] or "En curso"
+        jugadores = " vs. ".join(j for j in partida["jugadores"] if j)
+        print(partida["nombre"] + " | " + jugadores + " | " + ganador
+              + " | turno " + str(partida["turno"]) + " | " + str(partida["fecha"]))
+    return True
+
+
+def exportar_partidas_guardadas():
+    """Exporta los resúmenes guardados a un archivo CSV."""
+    destino = input("Archivo CSV (Enter para partidas_exportadas.csv): ").strip()
+    if not destino:
+        destino = "partidas_exportadas.csv"
+    ruta = registro.exportar_partidas(destino)
+    print("Partidas exportadas a " + str(ruta) + ".")
+    return True
+
+
+def mostrar_ranking():
+    """Muestra el ranking de victorias de las partidas guardadas."""
+    ranking = registro.obtener_ranking()
+    if not ranking:
+        print("Todavia no hay resultados para mostrar.")
+        return True
+    print("\n--- Ranking ---")
+    for posicion, datos in enumerate(ranking, 1):
+        print(str(posicion) + ". " + datos["jugador"] + " | "
+              + str(datos["victorias"]) + " victorias | "
+              + str(datos["partidas"]) + " partidas")
+    return True
+
+
+def submenu_registros():
+    """Ofrece el listado, la exportación y el ranking de partidas guardadas."""
+    opciones = {
+        "1": ("Listar partidas guardadas", listar_partidas_guardadas),
+        "2": ("Exportar partidas a CSV", exportar_partidas_guardadas),
+        "3": ("Ver ranking", mostrar_ranking),
+        "4": ("Volver", None),
+    }
+    volver = False
+    while not volver:
+        print("\n--- Registro de partidas ---")
+        for opcion, (texto, _) in opciones.items():
+            print(opcion + " - " + texto)
+        seleccion = leer_opcion(opciones)
+        if seleccion == "4":
+            volver = True
+        else:
+            opciones[seleccion][1]()
     return True
 
 
@@ -631,6 +733,7 @@ MENU_PRINCIPAL = {
     "3": ("Partida maquina contra maquina", partida_maquina_vs_maquina),
     "4": ("Continuar una partida guardada", continuar_partida),
     "5": ("Salir", salir),
+    "6": ("Registro, exportacion y ranking", submenu_registros),
 }
 
 
