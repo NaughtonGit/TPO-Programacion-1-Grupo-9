@@ -1,4 +1,5 @@
 import pytest
+import tablero
 
 from tablero import (
     AGUA_SIN_EXPLORAR,
@@ -151,3 +152,24 @@ def test_cambiar_valor_matriz():
     cambiar_valor_matriz(matriz, 0, 1, 5)
 
     assert matriz[0][1] == 5
+
+
+def test_tres_recorridos_visitan_todas_las_celdas_y_difieren_en_orden():
+    cubo = crear_cubo(2)
+
+    por_capas = tablero.recorrido_zxy(cubo)
+    recursivo_yxz = tablero.recorrido_recursivo_yxz(cubo)
+    recursivo_xyz = tablero.recorrido_recursivo_xyz(cubo)
+    esperadas = {
+        (z, x, y)
+        for z in range(1, 3)
+        for x in range(1, 3)
+        for y in range(1, 3)
+    }
+
+    for recorrido in (por_capas, recursivo_yxz, recursivo_xyz):
+        assert len(recorrido) == 8
+        assert set(recorrido) == esperadas
+
+    assert por_capas != recursivo_yxz
+    assert recursivo_yxz != recursivo_xyz

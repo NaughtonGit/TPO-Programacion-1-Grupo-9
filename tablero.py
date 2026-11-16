@@ -285,6 +285,53 @@ def obtener_vecinos(cubo, punto):
 
     return vecinos
 
+
+def recorrido_zxy(cubo):
+    """Devuelve las coordenadas recorriendo capas z y luego x e y."""
+    puntos = []
+    tamanio = len(cubo)
+
+    for z in range(1, tamanio + 1):
+        for x in range(1, tamanio + 1):
+            for y in range(1, tamanio + 1):
+                puntos.append((z, x, y))
+
+    return puntos
+
+
+def recorrido_recursivo_yxz(cubo):
+    """Devuelve las coordenadas con un recorrido recursivo y, x, z."""
+    puntos = []
+    tamanio = len(cubo)
+
+    def recorrer_y(y):
+        if y > tamanio:
+            return
+        for x in range(1, tamanio + 1):
+            for z in range(1, tamanio + 1):
+                puntos.append((z, x, y))
+        recorrer_y(y + 1)
+
+    recorrer_y(1)
+    return puntos
+
+
+def recorrido_recursivo_xyz(cubo):
+    """Devuelve las coordenadas con un recorrido recursivo x, y, z."""
+    puntos = []
+    tamanio = len(cubo)
+
+    def recorrer_x(x):
+        if x > tamanio:
+            return
+        for y in range(1, tamanio + 1):
+            for z in range(1, tamanio + 1):
+                puntos.append((z, x, y))
+        recorrer_x(x + 1)
+
+    recorrer_x(1)
+    return puntos
+
 def crear_matriz(filas, columnas, valor=0):
     """
     Recibe la cantidad de filas, columnas y un valor.

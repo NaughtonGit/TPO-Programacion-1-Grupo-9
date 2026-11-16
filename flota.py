@@ -120,7 +120,16 @@ def ubicar_nave(cubo, flota, nave, desde, hasta):
     for punto in celdas:
         tablero.cambiar_celda(cubo, punto, tablero.NAVE_OCULTA)
  
-    flota[nuevo_id(flota, nave)] = {"tipo": nave, "celdas": celdas, "impactos": set()}
+    danio = {}
+    for celda in celdas:
+        danio[celda] = 0
+
+    flota[nuevo_id(flota, nave)] = {
+        "tipo": nave,
+        "celdas": celdas,
+        "impactos": set(),
+        "danio": danio,
+    }
     return True
 
  
@@ -171,12 +180,20 @@ def registrar_impacto(cubo, flota, punto):
         nave = flota[id_nave]
 
         if punto in nave["celdas"]:
-            nave["impactos"].add(punto)
-            tablero.cambiar_celda(cubo, punto, tablero.IMPACTO)
+            danio = nave.setdefault("danio", {})
+            for celda in nave["celdas"]:
+                danio.setdefault(celda, 1 if celda in nave["impactos"] else 0)
 
-            if len(nave["impactos"]) == len(nave["celdas"]):
+            impactos_requeridos = 2 if nave["tipo"] == "P" else 1
+            if danio[punto] < impactos_requeridos:
+                danio[punto] = danio[punto] + 1
+                nave["impactos"].add(punto)
+
+            if estado_nave(flota, id_nave) == "hundida":
                 for celda in nave["celdas"]:
                     tablero.cambiar_celda(cubo, celda, tablero.HUNDIDO)
+            else:
+                tablero.cambiar_celda(cubo, punto, tablero.IMPACTO)
 
             return id_nave
 
@@ -194,16 +211,127 @@ def estado_nave(flota, id_nave):
     if id_nave not in flota:
         raise ValueError("Nave inexistente")
 
-    impactos = len(flota[id_nave]["impactos"])
-    celdas = len(flota[id_nave]["celdas"])
+    nave = flota[id_nave]
+    impactos = len(nave["impactos"])
+    danio = nave.get("danio", {})
+    impactos_requeridos = 2 if nave["tipo"] == "P" else 1
+    hundida = all(
+        danio.get(celda, int(celda in nave["impactos"])) >= impactos_requeridos
+        for celda in nave["celdas"]
+    )
 
-    if impactos == celdas:
+    if hundida:
         return "hundida"
 
     if impactos > 0:
         return "averiada"
 
     return "intacta"
+
+
+def puede_recibir_impacto(flota, punto):
+    """Indica si la celda pertenece a una nave y todavía admite impactos."""
+    punto = tuple(punto)
+
+    for nave in flota.values():
+        if punto not in nave["celdas"]:
+            continue
+
+        impactos_requeridos = 2 if nave["tipo"] == "P" else 1
+        danio = nave.get("danio", {})
+        cantidad = danio.get(punto, int(punto in nave["impactos"]))
+        return cantidad < impactos_requeridos
+
+    return False
+
+
+def serializar_flota(flota):
+    """Devuelve los datos de la flota en una estructura compatible con JSON."""
+    datos = {}
+
+    for id_nave, nave in flota.items():
+        danio = nave.get("danio", {})
+        datos[id_nave] = {
+            "tipo": nave["tipo"],
+            "celdas": [list(punto) for punto in sorted(nave["celdas"])],
+            "impactos": [list(punto) for punto in sorted(nave["impactos"])],
+            "danio": [
+                {
+                    "punto": list(punto),
+                    "cantidad": danio.get(punto, 1 if punto in nave["impactos"] else 0),
+                }
+                for punto in sorted(nave["celdas"])
+            ],
+        }
+
+    return datos
+
+
+def _leer_puntos(datos, nombre):
+    """Convierte puntos JSON a un conjunto y valida su formato."""
+    if not isinstance(datos, list):
+        raise ValueError("Lista de " + nombre + " invalida")
+
+    puntos = set()
+    for punto in datos:
+        if (not isinstance(punto, (list, tuple)) or len(punto) != 3
+                or any(type(coordenada) is not int or coordenada < 1
+                       for coordenada in punto)):
+            raise ValueError("Coordenada de " + nombre + " invalida")
+        puntos.add(tuple(punto))
+
+    if len(puntos) != len(datos):
+        raise ValueError("Hay coordenadas repetidas en " + nombre)
+    return puntos
+
+
+def deserializar_flota(datos):
+    """Reconstruye conjuntos y daño por celda desde datos compatibles con JSON."""
+    if not isinstance(datos, dict):
+        raise ValueError("Datos de flota invalidos")
+
+    flota = {}
+
+    for id_nave, datos_nave in datos.items():
+        if (not isinstance(datos_nave, dict)
+                or datos_nave.get("tipo") not in CATALOGO
+                or not isinstance(id_nave, str)):
+            raise ValueError("Datos de nave invalidos")
+
+        celdas = _leer_puntos(datos_nave.get("celdas"), "celdas")
+        impactos = _leer_puntos(datos_nave.get("impactos"), "impactos")
+        if not celdas or not impactos.issubset(celdas):
+            raise ValueError("Celdas o impactos de nave invalidos")
+
+        danio = {}
+
+        for punto in celdas:
+            danio[punto] = 1 if punto in impactos else 0
+        datos_danio = datos_nave.get("danio", [])
+        if not isinstance(datos_danio, list):
+            raise ValueError("Datos de daño de flota invalidos")
+        for dato in datos_danio:
+            if not isinstance(dato, dict) or "punto" not in dato or "cantidad" not in dato:
+                raise ValueError("Datos de daño de flota invalidos")
+            punto_danio = _leer_puntos([dato["punto"]], "daño").pop()
+            maximo = 2 if datos_nave["tipo"] == "P" else 1
+            if (punto_danio not in celdas or type(dato["cantidad"]) is not int
+                    or dato["cantidad"] < 0 or dato["cantidad"] > maximo):
+                raise ValueError("Datos de daño de flota invalidos")
+            danio[punto_danio] = dato["cantidad"]
+
+        if {punto for punto in celdas if danio[punto] > 0} != impactos:
+            raise ValueError("Los impactos no coinciden con el daño de la nave")
+
+        flota[id_nave] = {
+            "tipo": datos_nave["tipo"],
+            "celdas": celdas,
+            "impactos": impactos,
+            "danio": danio,
+        }
+
+    return flota
+
 
 def flota_hundida(flota):
     """

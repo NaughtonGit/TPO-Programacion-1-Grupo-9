@@ -1,3 +1,5 @@
+import json
+
 import pytest
 import tablero
 import flota
@@ -131,3 +133,39 @@ def test_flota_hundida():
 
     flota.registrar_impacto(cubo, mi_flota, [3, 5, 5])
     assert flota.flota_hundida(mi_flota) == True
+
+
+def test_portaaviones_necesita_dos_impactos_por_celda():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    assert flota.ubicar_nave(cubo, mi_flota, "P", (6, 1, 1), (6, 1, 5))
+
+    flota.registrar_impacto(cubo, mi_flota, (6, 1, 1))
+    assert flota.estado_nave(mi_flota, "P1") == "averiada"
+    assert flota.puede_recibir_impacto(mi_flota, (6, 1, 1))
+
+    flota.registrar_impacto(cubo, mi_flota, (6, 1, 1))
+    assert not flota.puede_recibir_impacto(mi_flota, (6, 1, 1))
+    assert flota.estado_nave(mi_flota, "P1") == "averiada"
+
+    for punto in [(6, 1, 2), (6, 1, 3), (6, 1, 4), (6, 1, 5)]:
+        flota.registrar_impacto(cubo, mi_flota, punto)
+        flota.registrar_impacto(cubo, mi_flota, punto)
+
+    assert flota.estado_nave(mi_flota, "P1") == "hundida"
+    assert all(tablero.obtener_celda(cubo, punto) == tablero.HUNDIDO
+               for punto in mi_flota["P1"]["celdas"])
+
+
+def test_serializar_y_deserializar_preserva_el_danio_del_portaaviones():
+    cubo = tablero.crear_cubo(8)
+    mi_flota = {}
+    flota.ubicar_nave(cubo, mi_flota, "P", (6, 1, 1), (6, 1, 5))
+    flota.registrar_impacto(cubo, mi_flota, (6, 1, 1))
+
+    datos = json.loads(json.dumps(flota.serializar_flota(mi_flota)))
+    restaurada = flota.deserializar_flota(datos)
+
+    assert restaurada == mi_flota
+    assert flota.estado_nave(restaurada, "P1") == "averiada"
+    assert flota.puede_recibir_impacto(restaurada, (2, 1, 1))
