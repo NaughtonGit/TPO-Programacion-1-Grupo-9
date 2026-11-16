@@ -172,7 +172,7 @@ def test_impacto_hundido_y_ganador():
 
 @pytest.mark.parametrize("jugada, error", [
     ({"arma": "T", "objetivo": (9, 1, 1)}, PuntoFueraDelCubo),
-    ({"arma": "G", "objetivo": (1, 1, 1)}, ArmaNoDisponible),
+    ({"arma": "Z", "objetivo": (1, 1, 1)}, ArmaNoDisponible),
 ])
 def test_jugada_invalida_no_cambia_el_turno(jugada, error):
     estado = estado_de_prueba()
@@ -211,15 +211,120 @@ def test_jugar_partida_completa(monkeypatch, capsys):
     estado = estado_de_prueba()
     simular_teclado(monkeypatch, [
         "s",
-        "1", "Z", "G", "3,5,4", "T", "3,5,4",   # Ana: letra invalida, arma no disponible, impacto
+        "1", "Z", "Q", "T", "3,5,4",            # Ana: dos armas invalidas e impacto
         "1", "T", "8,8,8",                      # Beto: agua
         "1", "T", "3,5,5",                      # Ana: hunde y gana
     ])
     partida.jugar(estado)
     salida = capsys.readouterr().out
-    assert "todavia no esta disponible" in salida
+    assert "Arma invalida" in salida
     assert "Nave hundida: Fragata" in salida
     assert "Gano Ana!" in salida
+
+
+@pytest.mark.parametrize("arma,extra,impactos,resultado", [
+    ("R", {}, {(3, 5, 4), (3, 5, 5)}, "hundido"),
+    ("C", {}, {(3, 5, 4)}, "impacto"),
+    ("L", {"eje": "y"}, {(3, 5, 4), (3, 5, 5)}, "hundido"),
+    ("O", {}, {(3, 5, 4), (3, 5, 5)}, "hundido"),
+])
+def test_armas_de_area_registran_danio_y_municion(arma, extra, impactos, resultado):
+    estado = estado_de_prueba()
+    jugada = {"arma": arma, "objetivo": (3, 5, 4)}
+    jugada.update(extra)
+
+    partida.ejecutar_turno(estado, jugada)
+
+    rival = estado["jugadores"][1]
+    assert rival["flota"]["F1"]["impactos"] == impactos
+    assert estado["jugadores"][0]["municion"][arma] == (
+        {"R": 2, "C": 1, "L": 1, "O": 0}[arma]
+    )
+    assert estado["ultimo_disparo"]["resultado"] == resultado
+
+
+def test_sonar_detecta_celdas_y_consume_municion():
+    estado = estado_de_prueba()
+
+    partida.ejecutar_turno(estado, {"arma": "S", "eje": "z", "valor": 3})
+
+    cubo_rival = estado["jugadores"][1]["cubo"]
+    assert tablero.obtener_celda(cubo_rival, (3, 5, 4)) == tablero.DETECTADO_SONAR
+    assert tablero.obtener_celda(cubo_rival, (3, 5, 5)) == tablero.DETECTADO_SONAR
+    assert estado["ultimo_disparo"]["contactos"] == 2
+    assert estado["jugadores"][0]["municion"]["S"] == 3
+
+
+def test_torpedo_guiado_impacta_celda_contigua_de_nave_averiada():
+    estado = estado_de_prueba()
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (3, 5, 4)})
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (8, 8, 8)})
+
+    partida.ejecutar_turno(estado, {"arma": "G", "objetivo": (8, 8, 8)})
+
+    assert estado["ultimo_disparo"]["celdas_afectadas"][0]["punto"] == (3, 5, 5)
+    assert estado["ultimo_disparo"]["resultado"] == "hundido"
+    assert estado["jugadores"][0]["municion"]["G"] == 0
+
+
+def test_nueva_partida_maquina_vs_maquina():
+    configuracion = {"jugadores": [
+        armar_jugador("Robot 1", (1, 1, 1), (1, 1, 2)),
+        armar_jugador("Robot 2", (3, 5, 4), (3, 5, 5)),
+    ]}
+
+    estado = partida.nueva_partida_maquina_vs_maquina(
+        configuracion, ("facil", "dificil")
+    )
+
+    assert [jugador["tipo"] for jugador in estado["jugadores"]] == ["maquina", "maquina"]
+    assert [jugador["dificultad"] for jugador in estado["jugadores"]] == ["facil", "dificil"]
+
+
+def test_destructor_revela_una_celda_de_quien_lo_ataca():
+    atacante = armar_jugador("Ana", (1, 1, 1), (1, 1, 2))
+    cubo_rival = tablero.crear_cubo(partida.TAMANIO)
+    flota_rival = {}
+    assert flota.ubicar_nave(cubo_rival, flota_rival, "D", (3, 5, 4), (3, 5, 6))
+    estado = partida.nueva_partida_1v1({"jugadores": [
+        atacante,
+        {"nombre": "Beto", "cubo": cubo_rival, "flota": flota_rival},
+    ]})
+
+    partida.ejecutar_turno(estado, {"arma": "T", "objetivo": (3, 5, 4)})
+
+    celdas_reveladas = [punto for punto in tablero.recorrido_zxy(atacante["cubo"])
+                        if tablero.obtener_celda(atacante["cubo"], punto)
+                        == tablero.DETECTADO_SONAR]
+    assert len(celdas_reveladas) == 1
+    assert estado["ultimo_disparo"]["celdas_reveladas"] == 1
+    assert "destructor rival" in partida.describir_disparo(estado["ultimo_disparo"])
+
+
+def test_hundir_estacion_orbital_otorga_municion_extra():
+    atacante = armar_jugador("Ana", (1, 1, 1), (1, 1, 2))
+    cubo_rival = tablero.crear_cubo(partida.TAMANIO)
+    flota_rival = {}
+    assert flota.ubicar_nave(cubo_rival, flota_rival, "E", (3, 3, 3), (4, 4, 4))
+    estado = partida.nueva_partida_1v1({"jugadores": [
+        atacante,
+        {"nombre": "Beto", "cubo": cubo_rival, "flota": flota_rival},
+    ]})
+    puntos_estacion = sorted(flota_rival["E1"]["celdas"])
+    puntos_agua = [(8, 8, valor) for valor in range(1, 9)]
+
+    for indice, punto in enumerate(puntos_estacion):
+        partida.ejecutar_turno(estado, {"arma": "T", "objetivo": punto})
+        if partida.hay_ganador(estado) is None:
+            partida.ejecutar_turno(
+                estado, {"arma": "T", "objetivo": puntos_agua[indice]}
+            )
+
+    municion = estado["jugadores"][0]["municion"]
+    assert partida.hay_ganador(estado) == "Ana"
+    assert municion == {"T": "ilimitada", "R": 4, "C": 3, "S": 5,
+                        "L": 3, "O": 2, "G": 2}
+    assert "Estacion orbital hundida" in partida.describir_disparo(estado["ultimo_disparo"])
 
 
 @pytest.mark.parametrize("ganador, objetivos", [

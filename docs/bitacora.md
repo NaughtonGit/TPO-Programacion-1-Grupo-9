@@ -10,7 +10,7 @@ Durante la primera entrega, el trabajo fue dividido entre los integrantes del gr
 - Desarrollo de la ubicación manual y automática de la flota.
 - Desarrollo de las pruebas en `test_flota.py`.
 
-### Nico
+### Yamil
 - Desarrollo del módulo `radar.py`.
 - Implementación de la búsqueda lineal de naves.
 - Registro de la cantidad de comparaciones realizadas durante la búsqueda.
@@ -41,7 +41,7 @@ Durante la primera entrega, el trabajo fue dividido entre los integrantes del gr
 - Visualización del estado del tablero.
 - Desarrollo de `test_partida.py`.
 
-Integracion 1: Mateo, Nico, Celina, Thomas
+Integracion 1: Mateo, Yamil, Celina, Thomas
 Encargado de Subirlo 1: Thomas
 - Integración de los módulos desarrollados en el grupo.
 - Resolución de conflictos entre ramas.
@@ -87,3 +87,34 @@ Encargado de subirlo 2: Mateo
 - Resolución de conflictos entre ramas.
 - Corrección de errores encontrados durante la integración.
 - Ejecución y verificación de las pruebas generales del proyecto.
+
+
+## Entrega 3
+
+Durante la tercera entrega se completaron funciones pendientes en varios módulos y se integraron al juego. A continuación se detallan las tareas y pruebas realizadas.
+
+### Mateo
+- Actualización del módulo `flota.py` para registrar el daño por celda del portaaviones y conservarlo al guardar y cargar una flota.
+- Implementación de la búsqueda recursiva, la reutilización del índice y el mapa de probabilidades en `radar.py`, además de unificar el formato de sus métricas.
+- Implementación de los recorridos iterativo y recursivos del cubo en `tablero.py`.
+- Desarrollo de las pruebas en `test_flota.py`, `test_radar.py` y `test_tablero.py`.
+
+### Celina
+- Desarrollo del módulo `armamento.py`.
+- Implementación de la onda expansiva con propagación recursiva y radio decreciente.
+- Implementación del torpedo guiado mediante la búsqueda recursiva de una celda contigua de una nave averiada.
+- Desarrollo de las pruebas en `test_armamento.py`.
+
+### Yamil
+- Desarrollo de las funciones de guardado, carga y listado de partidas, exportación a CSV y ranking en `registro.py`.
+- Integración de esas opciones en `partida.py`, incluyendo la continuación de partidas y el guardado de resultados.
+- Desarrollo de las pruebas en `test_registro.py`.
+
+### Thomas
+- En esta entrega no se identificaron cambios específicos de módulos atribuibles a Thomas.
+
+Integración 3: Mateo, Celina, Yamil
+Encargado de subirlo 3: Yamil
+- Integración de los módulos de flota, radar, tablero, armamento y registro con la lógica de la partida.
+- Corrección de errores encontrados durante la integración.
+- Ejecución y verificación de las pruebas generales del proyecto: 125 pruebas aprobadas.

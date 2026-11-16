@@ -4,6 +4,7 @@ import sys
 import tablero
 import flota
 import armamento
+import radar
 import registro
 from errores import (
     ErrorOperacionCubo,
@@ -17,6 +18,7 @@ from errores import (
 )
 
 TAMANIO = 8
+BONIFICACION_MUNICION_ESTACION = 1
 
 PATRON_PUNTO = r"(\d{1,2}),(\d{1,2}),(\d{1,2})"
 
@@ -25,19 +27,111 @@ PATRON_PUNTO = r"(\d{1,2}),(\d{1,2}),(\d{1,2})"
 # Logica de la partida (sin print ni input)
 # ---------------------------------------------------------------
 
-# Armas que ya se pueden disparar: letra -> funcion que aplica el disparo.
-# Cuando armamento sume armas nuevas, se agregan aca.
+def _punto_de_jugada(cubo, jugada):
+    """Valida y normaliza el objetivo de un disparo con coordenadas."""
+    punto = jugada.get("objetivo")
+    try:
+        valido = tablero.validar_punto(cubo, punto)
+    except (TypeError, ValueError, IndexError):
+        valido = False
+    if not valido:
+        raise PuntoFueraDelCubo("El objetivo esta fuera del cubo.")
+    return tuple(punto)
+
+
+def _celdas_torpedo(cubo, flota_objetivo, jugada):
+    punto = _punto_de_jugada(cubo, jugada)
+    return {"tipo": "ataque", "objetivo": punto,
+            "celdas": armamento.celdas_torpedo(punto)}
+
+
+def _celdas_racimo(cubo, flota_objetivo, jugada):
+    punto = _punto_de_jugada(cubo, jugada)
+    return {"tipo": "ataque", "objetivo": punto,
+            "celdas": armamento.celdas_racimo(cubo, punto)}
+
+
+def _celdas_carga_profundidad(cubo, flota_objetivo, jugada):
+    punto = _punto_de_jugada(cubo, jugada)
+    return {"tipo": "ataque", "objetivo": punto,
+            "celdas": armamento.celdas_carga_profundidad(cubo, punto)}
+
+
+def _celdas_barrido_laser(cubo, flota_objetivo, jugada):
+    punto = _punto_de_jugada(cubo, jugada)
+    eje = jugada.get("eje")
+    try:
+        celdas = armamento.celdas_barrido_laser(cubo, flota_objetivo, punto, eje)
+    except ValueError as error:
+        raise JugadaInvalida(str(error))
+    return {"tipo": "ataque", "objetivo": punto, "eje": eje, "celdas": celdas}
+
+
+def _celdas_onda_expansiva(cubo, flota_objetivo, jugada):
+    punto = _punto_de_jugada(cubo, jugada)
+    return {"tipo": "ataque", "objetivo": punto,
+            "celdas": armamento.celdas_onda_expansiva(cubo, punto)}
+
+
+def _celdas_torpedo_guiado(cubo, flota_objetivo, jugada):
+    punto = _punto_de_jugada(cubo, jugada)
+    return {"tipo": "ataque", "objetivo": punto,
+            "celdas": armamento.celdas_torpedo_guiado(cubo, flota_objetivo, punto)}
+
+
+def _ejecutar_sonar(cubo, flota_objetivo, jugada):
+    eje = jugada.get("eje")
+    valor = jugada.get("valor")
+    try:
+        plano = radar.sonar_plano(cubo, eje, valor)
+    except (TypeError, ValueError) as error:
+        raise JugadaInvalida(str(error))
+
+    contactos = []
+    for punto in plano:
+        if tablero.obtener_celda(cubo, punto) == tablero.DETECTADO_SONAR:
+            contactos.append(punto)
+
+    return {"tipo": "sonar", "eje": eje, "valor": valor,
+            "celdas": plano, "contactos": contactos}
+
+
+# Cada letra despacha a la funcion que prepara sus celdas afectadas.
 DISPAROS = {
-    "T": armamento.aplicar_torpedo,
+    "T": _celdas_torpedo,
+    "R": _celdas_racimo,
+    "C": _celdas_carga_profundidad,
+    "S": _ejecutar_sonar,
+    "L": _celdas_barrido_laser,
+    "O": _celdas_onda_expansiva,
+    "G": _celdas_torpedo_guiado,
 }
 
 
-def elegir_al_azar(cubo):
+def _celdas_reimpactables(cubo, flota_objetivo):
+    """Devuelve casillas del portaaviones que admiten su segundo impacto."""
+    puntos = []
+    for nave in flota_objetivo.values():
+        if nave["tipo"] != "P":
+            continue
+        for punto in nave["celdas"]:
+            if (tablero.obtener_celda(cubo, punto) == tablero.IMPACTO
+                    and flota.puede_recibir_impacto(flota_objetivo, punto)):
+                puntos.append(punto)
+    return puntos
+
+
+def elegir_al_azar(cubo, flota_objetivo=None):
     """
     elige al azar una celda del cubo que todavia no recibio disparos.
     recibe el cubo del rival.
     retorna una tupla (z, x, y).
     """
+    if flota_objetivo is not None:
+        reimpactables = _celdas_reimpactables(cubo, flota_objetivo)
+        if reimpactables:
+            return random.choice(reimpactables)
+
     libres = []
     n = len(cubo)
 
@@ -45,16 +139,34 @@ def elegir_al_azar(cubo):
         for x in range(1, n + 1):
             for y in range(1, n + 1):
                 estado_celda = tablero.obtener_celda(cubo, (z, x, y))
-                if estado_celda == tablero.AGUA_SIN_EXPLORAR or estado_celda == tablero.NAVE_OCULTA:
+                if estado_celda in (tablero.AGUA_SIN_EXPLORAR,
+                                    tablero.NAVE_OCULTA,
+                                    tablero.DETECTADO_SONAR):
                     libres.append((z, x, y))
 
+    if not libres:
+        raise JugadaInvalida("No quedan celdas disponibles para disparar.")
     return random.choice(libres)
 
 
+def elegir_por_probabilidad(cubo, flota_objetivo=None):
+    """Elige al azar entre las celdas con mayor probabilidad estimada."""
+    if flota_objetivo is not None:
+        reimpactables = _celdas_reimpactables(cubo, flota_objetivo)
+        if reimpactables:
+            return random.choice(reimpactables)
+
+    probabilidades = radar.mapa_probabilidad(cubo)
+    maximos = radar.obtener_maximos_probabilidad(cubo, probabilidades)
+    if not maximos:
+        raise JugadaInvalida("No quedan celdas disponibles para disparar.")
+    return random.choice(maximos)
+
+
 # Niveles de la maquina: nombre -> funcion que elige el objetivo.
-# El segundo nivel corresponde a la entrega 3.
 DIFICULTADES = {
     "facil": elegir_al_azar,
+    "dificil": elegir_por_probabilidad,
 }
 
 
@@ -131,6 +243,29 @@ def nueva_partida_vs_maquina(configuracion, dificultad):
     return armar_estado(crear_jugador(jugadores[0], "humano"), maquina)
 
 
+def nueva_partida_maquina_vs_maquina(configuracion, dificultades):
+    """Crea un estado inicial con dos maquinas y sus niveles de dificultad.
+
+    Recibe una configuracion con dos jugadores y una lista o tupla con una
+    dificultad para cada maquina. Devuelve el estado inicial o lanza
+    ConfiguracionInvalida si los datos no son correctos.
+    """
+    jugadores = validar_configuracion(configuracion)
+    if not isinstance(dificultades, (list, tuple)) or len(dificultades) != 2:
+        raise ConfiguracionInvalida("Indique una dificultad para cada maquina.")
+
+    maquinas = []
+    for indice in range(2):
+        dificultad = dificultades[indice]
+        if dificultad not in DIFICULTADES:
+            raise ConfiguracionInvalida("Dificultad desconocida: " + str(dificultad))
+        maquina = crear_jugador(jugadores[indice], "maquina")
+        maquina["dificultad"] = dificultad
+        maquinas.append(maquina)
+
+    return armar_estado(maquinas[0], maquinas[1])
+
+
 def jugador_actual(estado):
     """recibe el estado. retorna el jugador que tiene el turno."""
     return estado["jugadores"][estado["actual"]]
@@ -141,10 +276,105 @@ def rival_actual(estado):
     return estado["jugadores"][1 - estado["actual"]]
 
 
+def _revelar_celda_del_rival(jugador):
+    """Marca una celda oculta de la flota del rival como detectada."""
+    puntos = []
+    for punto in tablero.recorrido_zxy(jugador["cubo"]):
+        if tablero.obtener_celda(jugador["cubo"], punto) == tablero.NAVE_OCULTA:
+            puntos.append(punto)
+
+    if not puntos:
+        return None
+
+    punto = random.choice(puntos)
+    tablero.cambiar_celda(jugador["cubo"], punto, tablero.DETECTADO_SONAR)
+    return punto
+
+
+def _otorgar_municion_extra(jugador):
+    """Suma una unidad a cada arma limitada por el hundimiento de la estacion."""
+    otorgada = {}
+    for letra in jugador["municion"]:
+        if jugador["municion"][letra] != "ilimitada":
+            jugador["municion"][letra] = (
+                jugador["municion"][letra] + BONIFICACION_MUNICION_ESTACION
+            )
+            otorgada[letra] = BONIFICACION_MUNICION_ESTACION
+    return otorgada
+
+
+def _registrar_celda_afectada(cubo, flota_objetivo, punto, resultado, estado_previo):
+    """Registra en la flota un impacto producido sobre una celda."""
+    if (resultado == "celda ya atacada" and estado_previo == tablero.IMPACTO
+            and flota.puede_recibir_impacto(flota_objetivo, punto)):
+        resultado = "impacto"
+
+    detalle = {"punto": punto, "resultado": resultado, "nave": None}
+    if resultado != "impacto":
+        return detalle
+
+    id_nave = flota.registrar_impacto(cubo, flota_objetivo, punto)
+    if id_nave is None:
+        return detalle
+
+    nave = flota_objetivo[id_nave]
+    detalle["id_nave"] = id_nave
+    detalle["nave"] = flota.CATALOGO[nave["tipo"]]["nombre"]
+    detalle["tipo_nave"] = nave["tipo"]
+    detalle["impactos"] = sum(
+        nave.get("danio", {}).get(celda, int(celda in nave["impactos"]))
+        for celda in nave["celdas"]
+    )
+    detalle["celdas"] = len(nave["celdas"])
+    detalle["resultado"] = "hundido" if flota.estado_nave(flota_objetivo, id_nave) == "hundida" else "impacto"
+    return detalle
+
+
+def _crear_resumen_disparo(jugador, letra, preparado, detalles):
+    """Construye el resultado publico de un arma y sus impactos."""
+    impacto = [detalle for detalle in detalles if detalle["resultado"] in ("impacto", "hundido")]
+    hundidos = []
+    naves_impactadas = []
+    for detalle in impacto:
+        if detalle["nave"] and detalle["nave"] not in naves_impactadas:
+            naves_impactadas.append(detalle["nave"])
+        if (detalle["resultado"] == "hundido" and detalle["nave"]
+                and detalle["nave"] not in hundidos):
+            hundidos.append(detalle["nave"])
+
+    resultado = "agua"
+    if preparado["tipo"] == "sonar":
+        resultado = "sonar"
+    elif hundidos:
+        resultado = "hundido"
+    elif impacto:
+        resultado = "impacto"
+
+    disparo = {
+        "jugador": jugador["nombre"],
+        "arma": letra,
+        "objetivo": preparado.get("objetivo"),
+        "resultado": resultado,
+        "impactos_totales": len(impacto),
+        "naves_impactadas": naves_impactadas,
+        "naves_hundidas": hundidos,
+        "celdas_afectadas": detalles,
+    }
+    if preparado["tipo"] == "sonar":
+        disparo["eje"] = preparado["eje"]
+        disparo["valor"] = preparado["valor"]
+        disparo["contactos"] = len(preparado["contactos"])
+    if len(impacto) == 1:
+        disparo["nave"] = impacto[0]["nave"]
+        disparo["impactos"] = impacto[0].get("impactos", 0)
+        disparo["celdas"] = impacto[0].get("celdas", 0)
+    return disparo
+
+
 def ejecutar_turno(estado, jugada):
     """
     aplica la jugada del jugador que tiene el turno y pasa al siguiente.
-    recibe el estado y la jugada: {"arma": letra, "objetivo": (z, x, y)}.
+    recibe el estado y una jugada con arma y objetivo; el sonar usa eje y valor.
     retorna el estado actualizado. En "ultimo_disparo" queda el resultado.
     lanza PartidaTerminada, ArmaNoDisponible, SinMunicion,
     PuntoFueraDelCubo o CeldaYaAtacada.
@@ -152,43 +382,60 @@ def ejecutar_turno(estado, jugada):
     """
     if hay_ganador(estado) is not None:
         raise PartidaTerminada("La partida ya termino.")
+    if not isinstance(jugada, dict):
+        raise JugadaInvalida("La jugada debe indicar un arma y sus parametros.")
 
     jugador = jugador_actual(estado)
     rival = rival_actual(estado)
-    letra = jugada["arma"]
-    punto = jugada["objetivo"]
+    letra = jugada.get("arma")
 
-    if letra not in DISPAROS:
-        raise ArmaNoDisponible("El arma " + letra + " todavia no esta disponible.")
+    if not isinstance(letra, str) or letra not in DISPAROS:
+        raise ArmaNoDisponible("El arma elegida no esta disponible.")
     if jugador["municion"][letra] == 0:
         raise SinMunicion("No queda municion de " + armamento.obtener_arma(letra)["nombre"] + ".")
-    if not tablero.validar_punto(rival["cubo"], punto):
-        raise PuntoFueraDelCubo("El objetivo esta fuera del cubo.")
+    preparado = DISPAROS[letra](rival["cubo"], rival["flota"], jugada)
+    detalles = []
+    revelaciones = []
+    bonificaciones = {}
 
-    resultado = DISPAROS[letra](rival["cubo"], punto)
-    if resultado == "celda ya atacada":
-        raise CeldaYaAtacada("Esa celda ya fue atacada.")
+    if preparado["tipo"] == "sonar":
+        for punto in preparado["celdas"]:
+            detalles.append({"punto": punto, "resultado": "sonar", "nave": None})
+    else:
+        estados_previos = [tablero.obtener_celda(rival["cubo"], punto)
+                           for punto in preparado["celdas"]]
+        if all(estado_celda not in (tablero.AGUA_SIN_EXPLORAR,
+                                    tablero.NAVE_OCULTA,
+                                    tablero.DETECTADO_SONAR,
+                                    tablero.IMPACTO)
+               or (estado_celda == tablero.IMPACTO
+                   and not flota.puede_recibir_impacto(rival["flota"], punto))
+               for punto, estado_celda in zip(preparado["celdas"], estados_previos)):
+            raise CeldaYaAtacada("Todas las celdas alcanzadas ya fueron atacadas.")
+        resultados = armamento.aplicar_arma(rival["cubo"], preparado["celdas"])
+        for punto, resultado, previo in zip(preparado["celdas"], resultados, estados_previos):
+            detalle = _registrar_celda_afectada(
+                rival["cubo"], rival["flota"], punto, resultado, previo
+            )
+            detalles.append(detalle)
 
-    disparo = {
-        "jugador": jugador["nombre"],
-        "arma": letra,
-        "objetivo": punto,
-        "resultado": resultado,
-        "nave": None,
-    }
+            if detalle["resultado"] in ("impacto", "hundido"):
+                if detalle.get("tipo_nave") == "D":
+                    revelada = _revelar_celda_del_rival(jugador)
+                    if revelada is not None:
+                        revelaciones.append(revelada)
+                if (detalle.get("tipo_nave") == "E"
+                        and detalle["resultado"] == "hundido"):
+                    extra = _otorgar_municion_extra(jugador)
+                    for arma in extra:
+                        bonificaciones[arma] = bonificaciones.get(arma, 0) + extra[arma]
 
-    if resultado == "impacto":
-        id_nave = flota.registrar_impacto(rival["cubo"], rival["flota"], punto)
-        nave = rival["flota"][id_nave]
-        disparo["nave"] = flota.CATALOGO[nave["tipo"]]["nombre"]
-        disparo["impactos"] = len(nave["impactos"])
-        disparo["celdas"] = len(nave["celdas"])
-
-        if flota.estado_nave(rival["flota"], id_nave) == "hundida":
-            disparo["resultado"] = "hundido"
-
-    if jugador["municion"][letra] != "ilimitada":
-        jugador["municion"][letra] = jugador["municion"][letra] - 1
+    armamento.usar_municion(jugador["municion"], letra)
+    disparo = _crear_resumen_disparo(jugador, letra, preparado, detalles)
+    if revelaciones:
+        disparo["celdas_reveladas"] = len(revelaciones)
+    if bonificaciones:
+        disparo["municion_extra"] = bonificaciones
 
     registro.agregar_evento(estado["registro"], estado["turno"], jugador["nombre"],
                             armamento.obtener_arma(letra)["nombre"], disparo["resultado"])
@@ -213,8 +460,9 @@ def turno_maquina(estado):
     if maquina["tipo"] != "maquina":
         raise JugadaInvalida("No es el turno de la maquina.")
 
+    rival = rival_actual(estado)
     elegir_objetivo = DIFICULTADES[maquina["dificultad"]]
-    objetivo = elegir_objetivo(rival_actual(estado)["cubo"])
+    objetivo = elegir_objetivo(rival["cubo"], rival["flota"])
     return ejecutar_turno(estado, {"arma": "T", "objetivo": objetivo})
 
 
@@ -321,6 +569,34 @@ def leer_arma():
     return texto
 
 
+def leer_eje(mensaje, ejes):
+    """Pide un eje permitido y devuelve su letra en minuscula."""
+    permitidos = tuple(ejes)
+    texto = input(mensaje).strip().lower()
+    while texto not in permitidos:
+        print("Eje invalido. Opciones: " + "/".join(permitidos) + ".")
+        texto = input(mensaje).strip().lower()
+    return texto
+
+
+def leer_valor_plano(mensaje):
+    """Pide un numero de plano entre 1 y el tamanio del cubo."""
+    texto = input(mensaje).strip()
+    while re.match(r"^\d+$", texto) is None or not 1 <= int(texto) <= TAMANIO:
+        print("Plano invalido. Ingrese un numero entre 1 y " + str(TAMANIO) + ".")
+        texto = input(mensaje).strip()
+    return int(texto)
+
+
+def leer_dificultad(nombre="maquina"):
+    """Pide uno de los niveles de dificultad disponibles."""
+    opciones = {"1": "facil", "2": "dificil"}
+    print("Dificultad de " + nombre + ":")
+    print("1 - Facil")
+    print("2 - Dificil")
+    return opciones[leer_opcion(opciones)]
+
+
 def confirmar(pregunta):
     """
     hace una pregunta de si o no hasta que la respuesta sea valida.
@@ -354,7 +630,28 @@ def describir_disparo(disparo):
     recibe el diccionario del ultimo disparo.
     retorna el texto que describe el resultado.
     """
-    return MENSAJES[disparo["resultado"]].format(**disparo)
+    if disparo["resultado"] == "sonar":
+        cantidad = disparo["contactos"]
+        nombre = "celda detectada" if cantidad == 1 else "celdas detectadas"
+        mensaje = ("Sonar en el plano " + disparo["eje"] + "="
+                   + str(disparo["valor"]) + ": " + str(cantidad) + " "
+                   + nombre + ".")
+    elif disparo.get("impactos_totales", 0) > 1:
+        mensaje = "Impactos en " + str(disparo["impactos_totales"]) + " celdas."
+        hundidas = disparo.get("naves_hundidas", [])
+        if hundidas:
+            mensaje += " Naves hundidas: " + ", ".join(hundidas) + "."
+    else:
+        mensaje = MENSAJES[disparo["resultado"]].format(**disparo)
+
+    if disparo.get("celdas_reveladas", 0):
+        mensaje += " El destructor rival revelo una celda de tu flota."
+    if disparo.get("municion_extra"):
+        extra = []
+        for arma, cantidad in disparo["municion_extra"].items():
+            extra.append(arma + ": +" + str(cantidad))
+        mensaje += " Estacion orbital hundida; municion extra (" + ", ".join(extra) + ")."
+    return mensaje
 
 
 def dibujar_estado(nombre, cubo, mostrar_naves=True):
@@ -471,7 +768,15 @@ def opcion_disparar(estado):
     disparo_hecho = False
 
     while not disparo_hecho:
-        jugada = {"arma": leer_arma(), "objetivo": leer_punto("Objetivo: ")}
+        letra = leer_arma()
+        if letra == "S":
+            eje = leer_eje("Eje del plano (z/x/y): ", ("z", "x", "y"))
+            jugada = {"arma": letra, "eje": eje,
+                      "valor": leer_valor_plano("Numero del plano: ")}
+        else:
+            jugada = {"arma": letra, "objetivo": leer_punto("Objetivo (z,x,y): ")}
+            if letra == "L":
+                jugada["eje"] = leer_eje("Eje del barrido (x/y): ", ("x", "y"))
         try:
             ejecutar_turno(estado, jugada)
         except JugadaInvalida as error:
@@ -493,6 +798,27 @@ def opcion_ver_cubo(estado):
     rival = rival_actual(estado)
     dibujar_estado(jugador["nombre"] + " (tu flota)", jugador["cubo"])
     dibujar_estado(rival["nombre"] + " (tus disparos)", rival["cubo"], mostrar_naves=False)
+    return False
+
+
+MENU_RECORRIDOS = {
+    "1": ("Iterativo z, x, y", tablero.recorrido_zxy),
+    "2": ("Recursivo y, x, z", tablero.recorrido_recursivo_yxz),
+    "3": ("Recursivo x, y, z", tablero.recorrido_recursivo_xyz),
+}
+
+
+def opcion_recorrer_cubo(estado):
+    """Permite elegir y muestra una de las tres formas de recorrer el cubo."""
+    print("Recorridos del cubo:")
+    for opcion, (nombre, _) in MENU_RECORRIDOS.items():
+        print(opcion + " - " + nombre)
+    seleccion = leer_opcion(MENU_RECORRIDOS)
+    puntos = MENU_RECORRIDOS[seleccion][1](jugador_actual(estado)["cubo"])
+    for indice, punto in enumerate(puntos, 1):
+        print(texto_punto(punto), end="\n" if indice % 8 == 0 else " | ")
+    if len(puntos) % 8:
+        print()
     return False
 
 
@@ -519,6 +845,7 @@ MENU_TURNO = {
     "1": ("Disparar", opcion_disparar),
     "2": ("Ver el cubo", opcion_ver_cubo),
     "3": ("Guardar y salir", opcion_guardar_y_salir),
+    "4": ("Recorrer el cubo", opcion_recorrer_cubo),
 }
 
 
@@ -620,16 +947,25 @@ def partida_vs_maquina():
         {"nombre": "Jugador 1", "cubo": cubo1, "flota": flota1},
         {"nombre": "Maquina", "cubo": cubo2, "flota": flota2},
     ]}
-    jugar(nueva_partida_vs_maquina(configuracion, "facil"))
+    dificultad = leer_dificultad("la maquina")
+    jugar(nueva_partida_vs_maquina(configuracion, dificultad))
     return True
 
 
 def partida_maquina_vs_maquina():
-    """Ubica las flotas de las dos maquinas y dibuja el estado."""
+    """Ubica las flotas de las dos maquinas y ejecuta la partida completa."""
     cubo1, flota1 = flota_maquina("Maquina 1")
     cubo2, flota2 = flota_maquina("Maquina 2")
-    dibujar_estado("Maquina 1", cubo1)
-    dibujar_estado("Maquina 2", cubo2)
+    configuracion = {"jugadores": [
+        {"nombre": "Maquina 1", "cubo": cubo1, "flota": flota1},
+        {"nombre": "Maquina 2", "cubo": cubo2, "flota": flota2},
+    ]}
+    dificultades = [
+        leer_dificultad("Maquina 1"),
+        leer_dificultad("Maquina 2"),
+    ]
+    jugar(nueva_partida_maquina_vs_maquina(configuracion, dificultades),
+          confirmar_inicio=False)
     return True
 
 
