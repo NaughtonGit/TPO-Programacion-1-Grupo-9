@@ -2,6 +2,7 @@ import pytest
 
 from armamento import (
     ARMAS,
+    RADIO_ONDA,
     obtener_arma,
     obtener_catalogo,
     celdas_torpedo,
@@ -9,6 +10,8 @@ from armamento import (
     celdas_racimo,
     celdas_carga_profundidad,
     celdas_barrido_laser,
+    celdas_onda_expansiva,
+    celdas_torpedo_guiado,
     aplicar_arma,
     crear_municion,
     usar_municion
@@ -158,6 +161,123 @@ def test_armas_punto_o_eje_invalido():
 
     with pytest.raises(ValueError):
         celdas_barrido_laser(cubo, {}, [1, 1, 1], "z")
+
+
+def test_onda_expansiva_radio_cero():
+    cubo = crear_cubo(8)
+
+    assert celdas_onda_expansiva(cubo, [4, 4, 4], 0) == [(4, 4, 4)]
+
+
+def test_onda_expansiva_radio_por_defecto():
+    cubo = crear_cubo(8)
+
+    celdas = celdas_onda_expansiva(cubo, [4, 4, 4])
+
+    assert RADIO_ONDA == 1
+    assert celdas[0] == (4, 4, 4)
+    assert sorted(celdas) == sorted(celdas_racimo(cubo, [4, 4, 4]))
+
+
+def test_onda_expansiva_radio_decreciente():
+    cubo = crear_cubo(8)
+
+    celdas = celdas_onda_expansiva(cubo, [4, 4, 4], 2)
+
+    assert len(celdas) == 25
+    assert len(set(celdas)) == 25
+    assert (6, 4, 4) in celdas
+    assert (5, 5, 4) in celdas
+    assert (7, 4, 4) not in celdas
+
+
+def test_onda_expansiva_en_esquina_no_sale_del_cubo():
+    cubo = crear_cubo(8)
+
+    celdas = celdas_onda_expansiva(cubo, [1, 1, 1], 2)
+
+    assert len(celdas) == 10
+    assert (0, 1, 1) not in celdas
+
+
+def test_onda_expansiva_invalida():
+    cubo = crear_cubo(2)
+
+    with pytest.raises(ValueError):
+        celdas_onda_expansiva(cubo, [3, 1, 1])
+
+    with pytest.raises(ValueError):
+        celdas_onda_expansiva(cubo, [1, 1, 1], -1)
+
+    with pytest.raises(ValueError):
+        celdas_onda_expansiva(cubo, [1, 1, 1], "2")
+
+
+def test_onda_expansiva_aplicada():
+    cubo = crear_cubo(8)
+    cambiar_celda(cubo, [5, 4, 4], NAVE_OCULTA)
+
+    resultados = aplicar_arma(cubo, celdas_onda_expansiva(cubo, [4, 4, 4]))
+
+    assert len(resultados) == 7
+    assert resultados.count("impacto") == 1
+    assert resultados.count("agua") == 6
+
+
+def armar_flota_guiado(cubo, celdas, impactos):
+    """Arma una flota de un destructor y deja el cubo en el estado que corresponde."""
+    for celda in celdas:
+        cambiar_celda(cubo, celda, IMPACTO if celda in impactos else NAVE_OCULTA)
+
+    return {"D1": {"tipo": "D", "celdas": set(celdas), "impactos": set(impactos)}}
+
+
+def test_torpedo_guiado_sin_impacto_previo_es_un_torpedo():
+    cubo = crear_cubo(4)
+    flota = armar_flota_guiado(cubo, [(1, 1, 1), (1, 1, 2), (1, 1, 3)], [])
+
+    assert celdas_torpedo_guiado(cubo, flota, [3, 3, 3]) == [(3, 3, 3)]
+    assert celdas_torpedo_guiado(cubo, {}, [3, 3, 3]) == [(3, 3, 3)]
+
+
+def test_torpedo_guiado_busca_celda_contigua():
+    cubo = crear_cubo(4)
+    flota = armar_flota_guiado(cubo, [(1, 1, 1), (1, 1, 2), (1, 1, 3)], [(1, 1, 2)])
+
+    assert celdas_torpedo_guiado(cubo, flota, [4, 4, 4]) == [(1, 1, 1)]
+
+
+def test_torpedo_guiado_recorre_la_nave_en_forma_recursiva():
+    cubo = crear_cubo(4)
+    celdas = [(1, 1, 1), (1, 1, 2), (1, 1, 3), (1, 1, 4)]
+    flota = armar_flota_guiado(cubo, celdas, [(1, 1, 1), (1, 1, 2), (1, 1, 3)])
+
+    assert celdas_torpedo_guiado(cubo, flota, [4, 4, 4]) == [(1, 1, 4)]
+
+
+def test_torpedo_guiado_ignora_naves_hundidas():
+    cubo = crear_cubo(4)
+    celdas = [(1, 1, 1), (1, 1, 2)]
+    flota = armar_flota_guiado(cubo, celdas, celdas)
+
+    assert celdas_torpedo_guiado(cubo, flota, [3, 3, 3]) == [(3, 3, 3)]
+
+
+def test_torpedo_guiado_aplicado():
+    cubo = crear_cubo(4)
+    flota = armar_flota_guiado(cubo, [(1, 1, 1), (1, 1, 2), (1, 1, 3)], [(1, 1, 2)])
+
+    resultados = aplicar_arma(cubo, celdas_torpedo_guiado(cubo, flota, [4, 4, 4]))
+
+    assert resultados == ["impacto"]
+    assert obtener_celda(cubo, [1, 1, 1]) == IMPACTO
+
+
+def test_torpedo_guiado_punto_invalido():
+    cubo = crear_cubo(2)
+
+    with pytest.raises(ValueError):
+        celdas_torpedo_guiado(cubo, {}, [3, 1, 1])
 
 
 def test_aplicar_arma():

@@ -9,6 +9,10 @@ from tablero import (
     IMPACTO,
     DETECTADO_SONAR
 )
+from flota import estado_nave
+
+# Radio con el que se propaga la onda expansiva si no se indica otro.
+RADIO_ONDA = 1
 
 # Catalogo de armas disponibles.
 # Cada arma tiene una letra, un nombre y su cantidad inicial de municion.
@@ -156,6 +160,105 @@ def celdas_barrido_laser(cubo, flota, punto, eje):
             celdas.append(celda)
 
     return celdas
+
+
+def _propagar_onda(cubo, punto, radio, alcanzadas):
+    """
+    Recibe un cubo, un punto, el radio que le queda a la onda y el diccionario
+    de celdas alcanzadas (celda -> mayor radio con el que se llego a ella).
+    Agrega el punto y se llama a si misma sobre cada vecina ortogonal con un
+    radio menor en 1. Corta cuando el radio se agota o cuando la celda ya fue
+    alcanzada con un radio igual o mayor.
+    No devuelve nada: modifica alcanzadas.
+    """
+    # Si ya se llego aca con igual o mas radio, no hay nada nuevo que propagar.
+    if punto in alcanzadas and alcanzadas[punto] >= radio:
+        return
+
+    alcanzadas[punto] = radio
+
+    # Caso base: sin radio, la onda no sigue avanzando.
+    if radio == 0:
+        return
+
+    for vecino in obtener_vecinos(cubo, punto):
+        _propagar_onda(cubo, vecino, radio - 1, alcanzadas)
+
+
+def celdas_onda_expansiva(cubo, punto, radio=RADIO_ONDA):
+    """
+    Recibe un cubo, un punto [z, x, y] y el radio de la onda (por defecto RADIO_ONDA).
+    Devuelve una lista con las celdas que alcanza la onda: la apuntada primero y
+    luego las que la onda va tocando al propagarse, en forma recursiva, por las
+    vecinas ortogonales con radio decreciente. No hay celdas repetidas y las que
+    quedan fuera del cubo no se incluyen.
+    Lanza ValueError si el punto es invalido o el radio no es un entero mayor o igual a 0.
+    """
+    if not validar_punto(cubo, punto):
+        raise ValueError("Punto invalido")
+
+    if type(radio) != int or radio < 0:
+        raise ValueError("Radio invalido")
+
+    alcanzadas = {}
+    _propagar_onda(cubo, tuple(punto), radio, alcanzadas)
+
+    return list(alcanzadas)
+
+
+def _buscar_celda_contigua(cubo, celdas_nave, actual, visitadas):
+    """
+    Recibe un cubo, el conjunto de celdas de una nave, la celda desde la que se
+    busca y el conjunto de celdas ya visitadas.
+    Recorre en forma recursiva las celdas contiguas de la misma nave hasta
+    encontrar una que todavia no recibio un disparo (nave oculta o detectada
+    por el sonar).
+    Devuelve esa celda como tupla, o None si no queda ninguna en la nave.
+    """
+    for vecino in obtener_vecinos(cubo, actual):
+        if vecino in celdas_nave and vecino not in visitadas:
+            visitadas.add(vecino)
+
+            estado = obtener_celda(cubo, vecino)
+            if estado == NAVE_OCULTA or estado == DETECTADO_SONAR:
+                return vecino
+
+            # Esta celda ya fue impactada: se sigue la busqueda desde ella.
+            encontrada = _buscar_celda_contigua(cubo, celdas_nave, vecino, visitadas)
+            if encontrada is not None:
+                return encontrada
+
+    return None
+
+
+def celdas_torpedo_guiado(cubo, flota, punto):
+    """
+    Recibe un cubo, la flota atacada y un punto [z, x, y].
+    Si hay un impacto previo sobre una nave no hundida, busca en forma
+    recursiva una celda contigua de esa nave que todavia no fue atacada y
+    devuelve una lista con esa unica celda.
+    Si no hay impacto previo sobre una nave no hundida (o no queda ninguna
+    celda por atacar en ellas), actua como un torpedo comun y devuelve
+    una lista con el punto apuntado.
+    Lanza ValueError si el punto es invalido.
+    """
+    if not validar_punto(cubo, punto):
+        raise ValueError("Punto invalido")
+
+    for id_nave in flota:
+        nave = flota[id_nave]
+
+        # Solo sirven las naves ya impactadas que todavia no se hundieron.
+        if len(nave["impactos"]) == 0 or estado_nave(flota, id_nave) == "hundida":
+            continue
+
+        # Se ordena para que el resultado no dependa del orden del conjunto.
+        for impacto in sorted(nave["impactos"]):
+            encontrada = _buscar_celda_contigua(cubo, nave["celdas"], impacto, {impacto})
+            if encontrada is not None:
+                return [encontrada]
+
+    return [tuple(punto)]
 
 
 def aplicar_arma(cubo, celdas):
