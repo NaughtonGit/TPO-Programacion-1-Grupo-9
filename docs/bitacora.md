@@ -95,8 +95,6 @@ Durante la tercera entrega se completaron funciones pendientes en varios módulo
 
 ### Mateo
 - Actualización del módulo `flota.py` para registrar el daño por celda del portaaviones y conservarlo al guardar y cargar una flota.
-- Implementación de la búsqueda recursiva, la reutilización del índice y el mapa de probabilidades en `radar.py`, además de unificar el formato de sus métricas.
-- Implementación de los recorridos iterativo y recursivos del cubo en `tablero.py`.
 - Desarrollo de las pruebas en `test_flota.py`, `test_radar.py` y `test_tablero.py`.
 
 ### Celina
@@ -111,10 +109,11 @@ Durante la tercera entrega se completaron funciones pendientes en varios módulo
 - Desarrollo de las pruebas en `test_registro.py`.
 
 ### Thomas
-- En esta entrega no se identificaron cambios específicos de módulos atribuibles a Thomas.
+- Implementación de la búsqueda recursiva, la reutilización del índice y el mapa de probabilidades en `radar.py`, además de unificar el formato de sus métricas.
+- Implementación de los recorridos iterativo y recursivos del cubo en `tablero.py`.
 
-Integración 3: Mateo, Celina, Yamil
-Encargado de subirlo 3: Yamil
+Integración 3: Mateo, Celina, Yamil y Thomas
+Encargado de subirlo 3: Mateo
 - Integración de los módulos de flota, radar, tablero, armamento y registro con la lógica de la partida.
 - Corrección de errores encontrados durante la integración.
 - Ejecución y verificación de las pruebas generales del proyecto: 125 pruebas aprobadas.
